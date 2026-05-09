@@ -44,9 +44,7 @@ def get_deckname(deck_name):
                 with open("deck_cache.txt", "w") as write_file:
                     write_file.write(f"{name}\n")
                 break
-    
     return res
-        
         
 
 def upload(defn, hanzi, pinyin, url, filename, deck_name):
