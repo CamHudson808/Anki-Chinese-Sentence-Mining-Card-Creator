@@ -6,23 +6,59 @@ class Upload_Card:
         upload(defn, hanzi, pinyin, url, filename, deck_name)
 
 createModelParams = {
-    "modelName":"AnkiSentenceGen2",
+    "modelName":"AnkiSentenceGen",
     # "inOrderFields": ["Simp_Hanzi", "Trad_Hanzi", "Pinyin", "Definition"],
     # Instead, used card_creator to create the html for the front and the back
-    "inOrderFields": ["English", "Pinyin", "Hanzi"],
+    "inOrderFields": ["English", "Pinyin", "Hanzi", "Audio"],
     "isCloze": False,
     "cardTemplates": [
         {
-            "Front": "{{Pinyin}}",
-            "Back": "{{English}}<br>{{Pinyin}}<br>{{Hanzi}}"
+            "Front": "{{Audio}}",
+            "Back": "{{English}}<br>{{Pinyin}}<br>{{Hanzi}}<br>{{Audio}}"
         }
     ]
 }
 
+def get_deckname(deck_name):
+    res = ""
+
+    try:
+        with open("deck_cache.txt", "x") as file:
+            pass
+    except Exception as e:
+        print("deck_cache error:", e)
+        print("Hopefully error is just file already exists")
+
+    # Try to find deckname in the cache
+    with open("deck_cache.txt", "r") as read_file:
+        for line in read_file:
+            if deck_name in line:
+                res = line
+                break
+    # If it wasn't in the cache, then get all decknames, then find the deckname, then add it
+    if not res:
+        deckNames = invoke("deckNames")
+        for name in deckNames:
+            if deck_name in name:
+                res = name
+                with open("deck_cache.txt", "w") as write_file:
+                    write_file.write(f"{name}\n")
+                break
+    
+    return res
+        
+        
+
 def upload(defn, hanzi, pinyin, url, filename, deck_name):
-    # First, create the deck with name deck_name if deck_name doesn't exist with correct model, otherwise add to the deck deck_name
-    createDeck = invoke("createDeck", deck=f"{deck_name}")
-    print("createDeck res:", createDeck)
+    # I actually first want to check if the deck name is within an subdecks or something, so search for the deck_name a subarray of all the decks
+    # should cache this too
+    real_filename = get_deckname(deck_name)
+    print("res of real_filename:", real_filename)
+    if not real_filename:
+        # create the deck with name deck_name if deck_name doesn't exist with correct model, otherwise add to the deck deck_name
+        createDeck = invoke("createDeck", deck=f"{deck_name}")
+        real_filename = deck_name
+        print("createDeck res:", createDeck)
     try:
         createModel = invoke('createModel', **createModelParams)
         print("createModel res:", createModel)
@@ -32,21 +68,26 @@ def upload(defn, hanzi, pinyin, url, filename, deck_name):
         pass
     # Should be able to then garuantee that the deck_name exists
 
+    storeAudioFileParams = {
+        "filename": filename,
+        "url": url,
+    }
+
+    # Now, we need to download and store it in media folder
+    storeAudioFile = invoke("storeMediaFile", **storeAudioFileParams)
+    print(storeAudioFile)
+
     addCard = {
-                "deckName":deck_name,
-                "modelName":"AnkiSentenceGen2",
+                "deckName":real_filename,
+                "modelName":"AnkiSentenceGen",
                 "fields": {
                     "English": defn,
                     "Pinyin": pinyin,
                     "Hanzi": hanzi,
+                    "Audio": f"[sound:{filename}]"
                 },
-                "audio": [{
-                    "url": url,
-                    "filename": filename,
-                }]
             }
     canAdd = invoke("canAddNotesWithErrorDetail", notes=[addCard])
-    print("canAdd return:", canAdd)
 
     if(canAdd[0]['canAdd']):
         invoke('addNote', note=addCard)
